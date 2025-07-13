@@ -4,54 +4,126 @@
 #include <WinUser.h>
 
 #define UNICODE //Force MACROs to resolve to wide string equivalent instead of legacy ANSI 
+#define TRANSLATE_ID   1001
+#define CLEAR_ID   1002
+
 HWND buttonHandler;
 HWND translatedTextHandler;
+HWND scrollBarHandler;
+HWND clearButtonHandler;
+//HDC hdc;
 const int MAX_TEXT_LEN = 4096;
 int cnt = 0;
+
 LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
    //std::cout << "WndProc Called: " << uMsg << std::endl;
-   
+    SCROLLINFO si; 
+    int yChar = 1; //Scrolling unit
    switch(uMsg){
     case WM_CREATE:
-        //Create Button for Translate
-        buttonHandler = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"Translate\n", WS_CHILD | WS_VISIBLE | WS_BORDER,20,20,200,25,hWnd,NULL,NULL,NULL);
+        {//Create Button for Translate
+        buttonHandler = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"Translate\n", WS_CHILD | WS_VISIBLE | WS_BORDER,20,20,200,25,hWnd,(HMENU)TRANSLATE_ID,NULL,NULL);
         if(buttonHandler == NULL){
-            std::cout << "Error with creating textfield " << "\n";
+            std::cout << "Error with creating buttonHandler " << "\n";
             std::cout << GetLastError() << "\n";
         }
-
-        translatedTextHandler = CreateWindowExW(WS_EX_TOPMOST,L"STATIC",L"Initial Text",WS_VISIBLE | WS_CHILD,100, 100, 300, 300,hWnd,NULL,NULL,NULL);
+        translatedTextHandler = CreateWindowExW(0, L"EDIT", L"Text will be translated here :)",WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,100, 100, 300, 300,hWnd, NULL, GetModuleHandle(NULL), NULL);
+        //translatedTextHandler = CreateWindowExW(WS_EX_TOPMOST,L"STATIC",L"Initial Text",WS_VISIBLE | WS_CHILD,100, 100, 300, 300,hWnd,NULL,NULL,NULL);
         if(translatedTextHandler == NULL){
             std::cout << "Error with creating translatedTextHandler " << "\n";
             std::cout << GetLastError() << "\n";
         }
+        RECT buttonRect;
+         // Get the dimensions of the parent window's client area;
+        if (!GetClientRect(buttonHandler, &buttonRect))
+            {
+                std::cout << "Error with getting  buttonHandler RECT dimensions " << "\n";
+                std::cout << GetLastError() << "\n";
+            }
+        int padding = 100;
+        clearButtonHandler = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"Clear\n", WS_CHILD | WS_VISIBLE | WS_BORDER,buttonRect.right + padding,buttonRect.bottom,buttonRect.right - buttonRect.left,buttonRect.bottom - buttonRect.top,hWnd,(HMENU)CLEAR_ID,NULL,NULL);
+        if(clearButtonHandler == NULL){
+            std::cout << "Error with creating clearButtonHandler " << "\n";
+            std::cout << GetLastError() << "\n";
+        }
+        
+   /*
+        RECT rect;
+      
+        // Get the dimensions of the parent window's client area;
+        if (!GetClientRect(translatedTextHandler, &rect))
+            {
+                std::cout << "Error with getting translatedTextHandler RECT dimensions " << "\n";
+                std::cout << GetLastError() << "\n";
+            }
+        int scrollWidth = 20;
+        int scrollHeight = rect.bottom - rect.top;
+        int scrollX = rect.right - scrollWidth;
+        int scrollY = rect.top;
+        scrollBarHandler= CreateWindowExW(0,L"SCROLLBAR", NULL,WS_VISIBLE | WS_CHILD | SBS_VERT,scrollX,scrollY,scrollWidth,scrollHeight,translatedTextHandler,NULL,NULL,NULL);
+        
+        if(scrollBarHandler == NULL){
+            std::cout << "Error with creating scrollBarHandler " << "\n";
+            std::cout << GetLastError() << "\n";
+        }
 
+        //Set parameters in ScrollInfo for use later
+        si.cbSize = sizeof(si);
+        si.fMask = SIF_ALL;
+        si.nMin = 1;
+        si.nMax = 20;
+        */
+        /*
+        DeviceUnits = (DesignUnits/unitsPerEm) * (PointSize/72) * DeviceResolution 
+        
+        Reference: https://learn.microsoft.com/en-us/windows/win32/gdi/device-vs--design-units
+        
+        Pointsize is the font size: A font's size is specified in units called points. A point is .013837 of an inch. Following the point system devised by Pierre Simon Fournier, it is common practice to approximate a point as 1/72 inch. 
+        Reference: https://learn.microsoft.com/en-us/windows/win32/gdi/font-elements
+
+        */
+       //hdc = GetDC(scrollBarHandler); //We need to get the font attributes used in the static class object
+       //LPTEXTMETRIC textMetrics;
+       //GetTextMetrics(hdc,textMetrics);
+       //UINT textMetrics->tmHeight  
+       //UINT deviceUnits;
+       // si.nPage = deviceUnits;
+       //si.nPage = 20;
         break;
+    }
     case WM_COMMAND:
         if(HIWORD(wParam) == BN_CLICKED)
             {
-                std::cout << "Button Pressed" << "\n";
-                //Store string up till now into temp buffer, then add to buffer, then set is back
-                LPWSTR buffer = (LPWSTR)std::calloc(MAX_TEXT_LEN ,sizeof(WCHAR)); //Allocate larger buffer
-                GetWindowTextW(translatedTextHandler,buffer,MAX_TEXT_LEN);
-                /*
-                for(int i =0; i < MAX_TEXT_LEN;++i){
-                    std::cout << buffer[i] << "\t";
-                }
-                std::cout << "\n";
-                */
-                
-                std::wstring temp (buffer[MAX_TEXT_LEN-2] != 0 ? LPWSTR(L"") : buffer); //-2 because null terminated string, so last index always == 0
-                //std::wstring as = std::to_wstring(cnt);
-                temp += LPWSTR(L"\nButton Pressed");
-                SetWindowTextW(translatedTextHandler,temp.c_str());
-                cnt += 1;
+                int id = LOWORD(wParam); 
+                switch(id){
+                    case 1001:
+                    {
+                        std::cout << "Button Pressed" << "\n";
+                        //Store string up till now into temp buffer, then add to buffer, then set is back
+                        LPWSTR buffer = (LPWSTR)std::calloc(MAX_TEXT_LEN ,sizeof(WCHAR)); //Allocate larger buffer
+                        GetWindowTextW(translatedTextHandler,buffer,MAX_TEXT_LEN);
+                        /*
+                        for(int i =0; i < MAX_TEXT_LEN;++i){
+                            std::cout << buffer[i] << "\t";
+                        }
+                        std::cout << "\n";
+                        */
+                        
+                        std::wstring temp (buffer[MAX_TEXT_LEN-2] != 0 ? LPWSTR(L"") : buffer); //-2 because null terminated string, so last index always == 0
+                        temp += LPWSTR(L"\nButton Pressed");
+                        SetWindowTextW(translatedTextHandler,temp.c_str());
+                        break;
+                    }
+                    case 1002:
+                    {
+                        std::cout << "Clear Button Pressed" << "\n";
+                        SetWindowTextW(translatedTextHandler,NULL);
+                        break;
+                    }
+            }
             }
         break;
-        
-    case WM_KEYDOWN:
-        std::cout << "Key Down" << "\n";
-        break;
+    //Handle Scrolling
 
     case WM_DESTROY:
         std::cout <<"Exiting Application" << "\n";
