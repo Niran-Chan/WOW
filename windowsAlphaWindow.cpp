@@ -11,14 +11,24 @@ HWND buttonHandler;
 HWND translatedTextHandler;
 HWND scrollBarHandler;
 HWND clearButtonHandler;
+HWND sourceTextHandler;
 //HDC hdc;
 const int MAX_TEXT_LEN = 4096;
 int cnt = 0;
 
 LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
-   //std::cout << "WndProc Called: " << uMsg << std::endl;
-    SCROLLINFO si; 
-    int yChar = 1; //Scrolling unit
+    
+    int margin = 100;
+    
+    int textFieldPadding = 100;
+    int textFieldX = 100;
+    int textFieldY = 100;
+    int textFieldWidth = 300;
+    int textFieldHeight = 300;
+
+    
+
+
    switch(uMsg){
     case WM_CREATE:
         {//Create Button for Translate
@@ -27,7 +37,14 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
             std::cout << "Error with creating buttonHandler " << "\n";
             std::cout << GetLastError() << "\n";
         }
-        translatedTextHandler = CreateWindowExW(0, L"EDIT", L"Text will be translated here :)",WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,100, 100, 300, 300,hWnd, NULL, GetModuleHandle(NULL), NULL);
+        sourceTextHandler = CreateWindowExW(0, L"EDIT", L"Enter language to be translated here",WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL ,textFieldX, textFieldY, textFieldWidth, textFieldHeight,hWnd, NULL, GetModuleHandle(NULL), NULL);
+        margin = textFieldHeight + margin;
+        textFieldX = 100;
+        textFieldY = textFieldY + margin;
+        textFieldWidth = 300;
+        textFieldHeight = 300;
+
+        translatedTextHandler = CreateWindowExW(0, L"EDIT", L"Text will be translated here :)",WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY, textFieldX, textFieldY, textFieldWidth, textFieldHeight,hWnd, NULL, GetModuleHandle(NULL), NULL);
         //translatedTextHandler = CreateWindowExW(WS_EX_TOPMOST,L"STATIC",L"Initial Text",WS_VISIBLE | WS_CHILD,100, 100, 300, 300,hWnd,NULL,NULL,NULL);
         if(translatedTextHandler == NULL){
             std::cout << "Error with creating translatedTextHandler " << "\n";
@@ -98,7 +115,7 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                 switch(id){
                     case 1001:
                     {
-                        std::cout << "Button Pressed" << "\n";
+                        //std::cout << "Button Pressed" << "\n";
                         //Store string up till now into temp buffer, then add to buffer, then set is back
                         LPWSTR buffer = (LPWSTR)std::calloc(MAX_TEXT_LEN ,sizeof(WCHAR)); //Allocate larger buffer
                         GetWindowTextW(translatedTextHandler,buffer,MAX_TEXT_LEN);
@@ -117,7 +134,7 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                     case 1002:
                     {
                         std::cout << "Clear Button Pressed" << "\n";
-                        SetWindowTextW(translatedTextHandler,NULL);
+                        SetWindowTextW(sourceTextHandler,NULL);
                         break;
                     }
             }
