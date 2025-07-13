@@ -1,12 +1,13 @@
 #include <Windows.h> //Include all the special windows types defined later on
 #include <iostream>
+#include <string>
 #include <WinUser.h>
 
 #define UNICODE //Force MACROs to resolve to wide string equivalent instead of legacy ANSI 
 HWND buttonHandler;
 HWND translatedTextHandler;
-const int MAX_TEXT_LEN = 1024;
-
+const int MAX_TEXT_LEN = 4096;
+int cnt = 0;
 LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
    //std::cout << "WndProc Called: " << uMsg << std::endl;
    
@@ -31,11 +32,20 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
             {
                 std::cout << "Button Pressed" << "\n";
                 //Store string up till now into temp buffer, then add to buffer, then set is back
-                LPWSTR buffer = (LPWSTR)std::malloc(MAX_TEXT_LEN * sizeof(WCHAR));
+                LPWSTR buffer = (LPWSTR)std::calloc(MAX_TEXT_LEN ,sizeof(WCHAR)); //Allocate larger buffer
                 GetWindowTextW(translatedTextHandler,buffer,MAX_TEXT_LEN);
-                std::wstring temp (buffer);
-                temp += L"\nButton Pressed";
+                /*
+                for(int i =0; i < MAX_TEXT_LEN;++i){
+                    std::cout << buffer[i] << "\t";
+                }
+                std::cout << "\n";
+                */
+                
+                std::wstring temp (buffer[MAX_TEXT_LEN-2] != 0 ? LPWSTR(L"") : buffer); //-2 because null terminated string, so last index always == 0
+                //std::wstring as = std::to_wstring(cnt);
+                temp += LPWSTR(L"\nButton Pressed");
                 SetWindowTextW(translatedTextHandler,temp.c_str());
+                cnt += 1;
             }
         break;
         
