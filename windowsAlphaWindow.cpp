@@ -2,20 +2,41 @@
 #include <iostream>
 #include <string>
 #include <WinUser.h>
+#include <vector>
 
 #define UNICODE //Force MACROs to resolve to wide string equivalent instead of legacy ANSI 
 #define TRANSLATE_ID   1001
 #define CLEAR_ID   1002
+#define OPEN_PROG_HOTKEY_ID 1
 
+
+HWND windowHandler; //Main Window
 HWND buttonHandler;
 HWND translatedTextHandler;
 HWND scrollBarHandler;
 HWND clearButtonHandler;
 HWND sourceTextHandler;
-//HDC hdc;
-const int MAX_TEXT_LEN = 4096;
-int cnt = 0;
 
+std::vector<HWND> windowHandlers; //Just to keep track of all windows currently present
+
+
+const int MAX_TEXT_LEN = 4096;
+
+enum OPACITY_LEVEL{
+    LOW = 0,
+    HIGH = 255
+};
+
+enum OPACITY_LEVEL OPACITY = LOW;
+
+TRACKMOUSEEVENT generateTrackMouseEventObjects(HWND hWnd){
+        TRACKMOUSEEVENT tme = {0};
+        tme.cbSize = sizeof(TRACKMOUSEEVENT);
+        tme.dwFlags = TME_HOVER | TME_LEAVE;
+        tme.hwndTrack = hWnd;
+        tme.dwHoverTime = 10;
+        return tme;
+}
 LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
     
     int margin = 100;
@@ -26,7 +47,7 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
     int textFieldWidth = 300;
     int textFieldHeight = 300;
 
-    
+
 
 
    switch(uMsg){
@@ -37,7 +58,16 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
             std::cout << "Error with creating buttonHandler " << "\n";
             std::cout << GetLastError() << "\n";
         }
+        windowHandlers.push_back(buttonHandler);
+        
         sourceTextHandler = CreateWindowExW(0, L"EDIT", L"Enter language to be translated here",WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL ,textFieldX, textFieldY, textFieldWidth, textFieldHeight,hWnd, NULL, GetModuleHandle(NULL), NULL);
+        if(sourceTextHandler == NULL){
+            std::cout << "Error with creating sourceTextHandler" << "\n";
+            std::cout << GetLastError() << "\n";
+        }
+        windowHandlers.push_back(sourceTextHandler);
+        
+        //Generating space for next textfield
         margin = textFieldHeight + margin;
         textFieldX = 100;
         textFieldY = textFieldY + margin;
@@ -50,6 +80,8 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
             std::cout << "Error with creating translatedTextHandler " << "\n";
             std::cout << GetLastError() << "\n";
         }
+        windowHandlers.push_back(translatedTextHandler);
+
         RECT buttonRect;
          // Get the dimensions of the parent window's client area;
         if (!GetClientRect(buttonHandler, &buttonRect))
@@ -63,49 +95,7 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
             std::cout << "Error with creating clearButtonHandler " << "\n";
             std::cout << GetLastError() << "\n";
         }
-        
-   /*
-        RECT rect;
-      
-        // Get the dimensions of the parent window's client area;
-        if (!GetClientRect(translatedTextHandler, &rect))
-            {
-                std::cout << "Error with getting translatedTextHandler RECT dimensions " << "\n";
-                std::cout << GetLastError() << "\n";
-            }
-        int scrollWidth = 20;
-        int scrollHeight = rect.bottom - rect.top;
-        int scrollX = rect.right - scrollWidth;
-        int scrollY = rect.top;
-        scrollBarHandler= CreateWindowExW(0,L"SCROLLBAR", NULL,WS_VISIBLE | WS_CHILD | SBS_VERT,scrollX,scrollY,scrollWidth,scrollHeight,translatedTextHandler,NULL,NULL,NULL);
-        
-        if(scrollBarHandler == NULL){
-            std::cout << "Error with creating scrollBarHandler " << "\n";
-            std::cout << GetLastError() << "\n";
-        }
-
-        //Set parameters in ScrollInfo for use later
-        si.cbSize = sizeof(si);
-        si.fMask = SIF_ALL;
-        si.nMin = 1;
-        si.nMax = 20;
-        */
-        /*
-        DeviceUnits = (DesignUnits/unitsPerEm) * (PointSize/72) * DeviceResolution 
-        
-        Reference: https://learn.microsoft.com/en-us/windows/win32/gdi/device-vs--design-units
-        
-        Pointsize is the font size: A font's size is specified in units called points. A point is .013837 of an inch. Following the point system devised by Pierre Simon Fournier, it is common practice to approximate a point as 1/72 inch. 
-        Reference: https://learn.microsoft.com/en-us/windows/win32/gdi/font-elements
-
-        */
-       //hdc = GetDC(scrollBarHandler); //We need to get the font attributes used in the static class object
-       //LPTEXTMETRIC textMetrics;
-       //GetTextMetrics(hdc,textMetrics);
-       //UINT textMetrics->tmHeight  
-       //UINT deviceUnits;
-       // si.nPage = deviceUnits;
-       //si.nPage = 20;
+        windowHandlers.push_back(clearButtonHandler);
         break;
     }
     case WM_COMMAND:
@@ -140,10 +130,32 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
             }
             }
         break;
-    //Handle Scrolling
+    
 
+    case WM_HOTKEY:
+    {
+        HWND previousWindow;
+        if(wParam == OPEN_PROG_HOTKEY_ID){
+            if(OPACITY == LOW)
+                    { previousWindow = GetForegroundWindow();  // Save this before changing focus
+                        OPACITY = HIGH;
+                        SetLayeredWindowAttributes(hWnd, 0, OPACITY, LWA_ALPHA);
+                        SetFocus(sourceTextHandler);
+                        SetForegroundWindow(sourceTextHandler);
+                    }
+                    else
+                    {
+                        OPACITY=LOW;
+                        SetLayeredWindowAttributes(hWnd, 0, OPACITY, LWA_ALPHA);
+                        SetFocus(previousWindow);
+                        SetForegroundWindow(previousWindow);
+                    }
+        }
+        break;
+    }
     case WM_DESTROY:
         std::cout <<"Exiting Application" << "\n";
+        UnregisterHotKey(hWnd,OPEN_PROG_HOTKEY_ID);
         PostQuitMessage(0);
         return (0);
    }
@@ -151,21 +163,8 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
 };
 
 int main (){
-    
-    //DLL Loading
-    /*
-    HMODULE a= LoadLibrary(TEXT("firstDLL.dll"));
-    FARPROC b= GetProcAddress(a,TEXT("myMessage"));
-    b("Inside DLL!");
-    if(a == NULL){
-        printf("Get Process for DLL failed!\n");
-    }
-    else{
-        printf("Address found at : %x \n",a);
-    }
-*/
 
-    DWORD extendedWindowStyle = WS_EX_TOPMOST;
+    DWORD extendedWindowStyle = WS_EX_TOPMOST |  WS_EX_LAYERED  ;
     
     //Define Windows Class to be registered 
     WNDCLASSEXW translateOverlayClass = { };
@@ -183,24 +182,34 @@ int main (){
     LPCWSTR windowName = L"Translate Overlay";
     DWORD windowStyle =  WS_OVERLAPPEDWINDOW;
 
-    int X = 0,Y = 0,nWidth= 1000,nHeight=1000;
+    int X = 0,Y = 0,nWidth= 600,nHeight=800;
 
     //Intantialise Window and Window Handler
-    HWND windowHandler = CreateWindowExW(extendedWindowStyle,className,windowName,windowStyle,X,Y,nWidth,nHeight,NULL,NULL,NULL,NULL);
-    
+    windowHandler = CreateWindowExW(extendedWindowStyle,className,windowName,windowStyle,X,Y,nWidth,nHeight,NULL,NULL,NULL,NULL);
     if(windowHandler == NULL){
         DWORD errorCode = GetLastError();
         std::cerr << "CreateWindowExW failed with error: " << errorCode << std::endl;
         return(0);
     }
+    windowHandlers.push_back(windowHandler);
+
     std::cout << "Window and related classes initialised" << "\n";
     
+    //Setting initial transparency  
+    COLORREF crKey = RGB(255,255,255);
+    BYTE bAlpha = OPACITY;
+    SetLayeredWindowAttributes(windowHandler,crKey,bAlpha,LWA_ALPHA);
+    std::cout << "Transparency set for window" << "\n";
+
+    //Register Keybinds
+    RegisterHotKey(windowHandler, OPEN_PROG_HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, 'T');  // Ctrl + Shift + T
+
+
     //Show and Update paint on window
     int showWindowStyle = SW_SHOW;
- 
     ShowWindow(windowHandler, showWindowStyle);
     UpdateWindow(windowHandler);
-
+    
     //Get Messages from thread and react appropriately
     MSG msg; //MSG Struct gives packaged information from current working thread on message details
     BOOL getMessageRet;
