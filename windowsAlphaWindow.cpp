@@ -3,12 +3,12 @@
 #include <string>
 #include <WinUser.h>
 #include <vector>
+#include <fstream>
 
 #define UNICODE //Force MACROs to resolve to wide string equivalent instead of legacy ANSI 
 #define TRANSLATE_ID   1001
 #define CLEAR_ID   1002
 #define OPEN_PROG_HOTKEY_ID 1
-
 
 HWND windowHandler; //Main Window
 HWND buttonHandler;
@@ -19,8 +19,12 @@ HWND sourceTextHandler;
 
 std::vector<HWND> windowHandlers; //Just to keep track of all windows currently present
 
-
+//Constants
 const int MAX_TEXT_LEN = 4096;
+const int MAX_BUFFER_CHAR_ENV = 32767;
+
+//Variables dependent on environment variables
+LPWSTR TRANSLATE_API;
 
 enum OPACITY_LEVEL{
     LOW = 0,
@@ -161,9 +165,51 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
    }
    return DefWindowProcW(hWnd, uMsg, wParam, lParam); 
 };
+void populateEnvironmentVars(){
+   //Parse .env file that is available locally to populate my environment variables
+    std::wifstream myEnvFile(".env");
+    std::wstring currLine;
+    
+  
+    while (getline (myEnvFile, currLine))
+    {
+        //From text, we tokenise to split 
+        int tokenIdx = 0;
+        for(int i =0; i < sizeof(currLine);i +=1){
+            if (currLine[i] == '='){
+                tokenIdx = i;
+                break;
+            }
+        } 
+        std::wstring envFileName = currLine.substr(0,tokenIdx);
+        std::wstring envFileValue = currLine.substr(tokenIdx+1);
+        BOOL res = SetEnvironmentVariableW(envFileName.c_str(),envFileValue.c_str());
+        if(res == 0){
+                std::cout << "Error in setting env variable: " << GetLastError() << "\n";
+        
+            }
+        //std::wcout <<"Environment Variable:" <<  envFileName << "|Value:" << envFileValue << "|\n"; 
 
+    }
+
+    //Inherit values that are important for the rest of the program
+    TRANSLATE_API = (LPWSTR)std::calloc(MAX_BUFFER_CHAR_ENV,sizeof(LPWSTR));
+    BOOL ret = GetEnvironmentVariableW(L"TRANSLATE_API",TRANSLATE_API,MAX_BUFFER_CHAR_ENV);
+
+    std::wcout << TRANSLATE_API << "\n";
+    if(ret == 0){
+        std::cout << "Failed getting value from environment variable. Keeping default." << GetLastError() << "\n";
+        std::wstring a = L"DEFAULT_EMPTY";
+        wcscpy(TRANSLATE_API,a.c_str());
+    }
+    std::wcout << TRANSLATE_API << "\n";
+    // Close the file
+    myEnvFile.close(); 
+    
+};
 int main (){
-
+    //Read from .env file for auto-environment vars population
+    populateEnvironmentVars();
     DWORD extendedWindowStyle = WS_EX_TOPMOST |  WS_EX_LAYERED  ;
     
     //Define Windows Class to be registered 
@@ -227,6 +273,7 @@ int main (){
     }
 
     std::cout <<"Main Function Completed :)" << std::endl;
+    free(TRANSLATE_API);
 
     return 0;
 
