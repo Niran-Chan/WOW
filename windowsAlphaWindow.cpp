@@ -8,14 +8,16 @@
 #define UNICODE //Force MACROs to resolve to wide string equivalent instead of legacy ANSI 
 #define TRANSLATE_ID   1001
 #define CLEAR_ID   1002
+#define SETTINGS_ID 1003
 #define OPEN_PROG_HOTKEY_ID 1
 
 HWND windowHandler; //Main Window
-HWND buttonHandler;
+HWND translateButtonHandler;
 HWND translatedTextHandler;
 HWND scrollBarHandler;
 HWND clearButtonHandler;
 HWND sourceTextHandler;
+HWND settingsButtonHandler;
 
 std::vector<HWND> windowHandlers; //Just to keep track of all windows currently present
 
@@ -30,9 +32,39 @@ enum OPACITY_LEVEL{
     LOW = 0,
     HIGH = 255
 };
+enum FLEX_DIR{
+    ROW = 0,
+    COL = 1
+};
 
 enum OPACITY_LEVEL OPACITY = LOW;
-
+/*
+    Function to layout similar to flex by using only the handlers that we have already defined. Layout is done relative to the first handle in the vector (parent handle) as offset
+*/
+void flexLayout(std::vector<HWND> componentHandlers,int parentX,int parentY, int gap,enum FLEX_DIR dir){
+    int xGap = gap,yGap =0;
+    if(dir == FLEX_DIR::COL)
+    {
+        yGap = gap;
+        xGap = 0;
+    }
+    int x,y,width,height; 
+    x = parentX;
+    y = parentY;
+    for(int i =0; i < componentHandlers.size();++i){
+        HWND currHandler = componentHandlers[i];
+        RECT currCoords;
+        GetWindowRect(currHandler,&currCoords);
+        width = currCoords.right - currCoords.left;
+        height = currCoords.bottom - currCoords.top;   
+        BOOL ret = SetWindowPos(currHandler,NULL,x,y,width,height,0);
+        if(ret == 0){
+            std::cout << "Failed in setting new coordinates in flexLayout. Error Code: " << GetLastError() << "\n";
+        }
+        if(dir == FLEX_DIR::COL) {y = y + height + yGap;}
+        else {x = x + width + xGap;}
+    }
+}
 TRACKMOUSEEVENT generateTrackMouseEventObjects(HWND hWnd){
         TRACKMOUSEEVENT tme = {0};
         tme.cbSize = sizeof(TRACKMOUSEEVENT);
@@ -43,63 +75,58 @@ TRACKMOUSEEVENT generateTrackMouseEventObjects(HWND hWnd){
 }
 LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
     
-    int margin = 100;
-    
-    int textFieldPadding = 100;
-    int textFieldX = 100;
-    int textFieldY = 100;
-    int textFieldWidth = 300;
-    int textFieldHeight = 300;
-
-
-
-
    switch(uMsg){
     case WM_CREATE:
-        {//Create Button for Translate
-        buttonHandler = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"Translate\n", WS_CHILD | WS_VISIBLE | WS_BORDER,20,20,200,25,hWnd,(HMENU)TRANSLATE_ID,NULL,NULL);
-        if(buttonHandler == NULL){
+        {
+        std::vector <HWND> textFieldHandlers;
+        std::vector<HWND> buttonHandlers;
+        int buttonWidth = 100;
+        int buttonHeight = 25;    
+        //Create Button for Translate
+        translateButtonHandler = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"Translate\n", WS_CHILD | WS_VISIBLE | WS_BORDER,20,20,buttonWidth,buttonHeight,hWnd,(HMENU)TRANSLATE_ID,NULL,NULL);
+        if(translateButtonHandler == NULL){
             std::cout << "Error with creating buttonHandler " << "\n";
             std::cout << GetLastError() << "\n";
         }
-        windowHandlers.push_back(buttonHandler);
+        windowHandlers.push_back(translateButtonHandler);
+        buttonHandlers.push_back(translateButtonHandler);
         
-        sourceTextHandler = CreateWindowExW(0, L"EDIT", L"Enter language to be translated here",WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL ,textFieldX, textFieldY, textFieldWidth, textFieldHeight,hWnd, NULL, GetModuleHandle(NULL), NULL);
+        sourceTextHandler = CreateWindowExW(0, L"EDIT", L"Enter language to be translated here",WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL ,0, 0, 300, 300,hWnd, NULL, GetModuleHandle(NULL), NULL);
         if(sourceTextHandler == NULL){
             std::cout << "Error with creating sourceTextHandler" << "\n";
             std::cout << GetLastError() << "\n";
         }
         windowHandlers.push_back(sourceTextHandler);
-        
-        //Generating space for next textfield
-        margin = textFieldHeight + margin;
-        textFieldX = 100;
-        textFieldY = textFieldY + margin;
-        textFieldWidth = 300;
-        textFieldHeight = 300;
+        textFieldHandlers.push_back(sourceTextHandler);
 
-        translatedTextHandler = CreateWindowExW(0, L"EDIT", L"Text will be translated here :)",WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY, textFieldX, textFieldY, textFieldWidth, textFieldHeight,hWnd, NULL, GetModuleHandle(NULL), NULL);
+
+        translatedTextHandler = CreateWindowExW(0, L"EDIT", L"Text will be translated here :)",WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY, 0, 0, 300, 300,hWnd, NULL, GetModuleHandle(NULL), NULL);
         //translatedTextHandler = CreateWindowExW(WS_EX_TOPMOST,L"STATIC",L"Initial Text",WS_VISIBLE | WS_CHILD,100, 100, 300, 300,hWnd,NULL,NULL,NULL);
         if(translatedTextHandler == NULL){
             std::cout << "Error with creating translatedTextHandler " << "\n";
             std::cout << GetLastError() << "\n";
         }
         windowHandlers.push_back(translatedTextHandler);
+        textFieldHandlers.push_back(translatedTextHandler);
 
-        RECT buttonRect;
-         // Get the dimensions of the parent window's client area;
-        if (!GetClientRect(buttonHandler, &buttonRect))
-            {
-                std::cout << "Error with getting  buttonHandler RECT dimensions " << "\n";
-                std::cout << GetLastError() << "\n";
-            }
-        int padding = 100;
-        clearButtonHandler = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"Clear\n", WS_CHILD | WS_VISIBLE | WS_BORDER,buttonRect.right + padding,buttonRect.bottom,buttonRect.right - buttonRect.left,buttonRect.bottom - buttonRect.top,hWnd,(HMENU)CLEAR_ID,NULL,NULL);
+        clearButtonHandler = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"Clear\n", WS_CHILD | WS_VISIBLE | WS_BORDER, 0, 0, buttonWidth, buttonHeight,hWnd,(HMENU)CLEAR_ID,NULL,NULL);
         if(clearButtonHandler == NULL){
             std::cout << "Error with creating clearButtonHandler " << "\n";
             std::cout << GetLastError() << "\n";
         }
         windowHandlers.push_back(clearButtonHandler);
+        buttonHandlers.push_back(clearButtonHandler);
+
+        settingsButtonHandler = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY,L"Button",L"Settings\n",WS_CHILD | WS_VISIBLE | WS_BORDER,0,0,buttonWidth,buttonHeight,hWnd,(HMENU)SETTINGS_ID,NULL,NULL);
+        if(settingsButtonHandler == NULL){
+            std::cout << "Error with creating settingsButtonHandler " << "\n";
+            std::cout << GetLastError() << "\n";
+        }
+        windowHandlers.push_back(settingsButtonHandler);
+        buttonHandlers.push_back(settingsButtonHandler);
+
+        flexLayout(textFieldHandlers,100,100,100,FLEX_DIR::COL);
+        flexLayout(buttonHandlers,0,0,30,FLEX_DIR::ROW);
         break;
     }
     case WM_COMMAND:
@@ -195,14 +222,11 @@ void populateEnvironmentVars(){
     //Inherit values that are important for the rest of the program
     TRANSLATE_API = (LPWSTR)std::calloc(MAX_BUFFER_CHAR_ENV,sizeof(LPWSTR));
     BOOL ret = GetEnvironmentVariableW(L"TRANSLATE_API",TRANSLATE_API,MAX_BUFFER_CHAR_ENV);
-
-    std::wcout << TRANSLATE_API << "\n";
     if(ret == 0){
         std::cout << "Failed getting value from environment variable. Keeping default." << GetLastError() << "\n";
         std::wstring a = L"DEFAULT_EMPTY";
         wcscpy(TRANSLATE_API,a.c_str());
     }
-    std::wcout << TRANSLATE_API << "\n";
     // Close the file
     myEnvFile.close(); 
     
