@@ -1,62 +1,26 @@
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-
-#define DEFAULT_BUFLEN 512 //Default buffer length of 8KB
-
-#include <iostream>
-#include <string>
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <iphlpapi.h>
+#include "httpClient.hpp"
 
 //#pragma comment(lib, "Ws2_32.lib") //Linking instructions for Visual C++, will not work for g++. Link manually instead 
 //-lws2_32 flag added to g++
 
-enum REQUEST_TYPE {
-    GET,
-    POST,
-    PUT,
-    PATCH,
-    DEL
 
-};
-
-class HttpClient{
-    public:
-    
-    enum REQUEST_TYPE requestType;
-    PCSTR hostname;
-    PCSTR port = "4444";
-    
-    int iResult;
-    
-    WSADATA wsaData;
-    
-    //ip address info struct initialised to hold information from transactions
-    addrinfo *result=NULL,*ptr = NULL;
-    addrinfo hints  {};
-    
-    SOCKET currSocket;
-   
-    
-    
-    //Default Constructors
-    HttpClient(REQUEST_TYPE requestType){
-        //Initialise WinSocksDLL
-        iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
-        if(iResult != 0){
-            std::cout << "WinSock failed to start" << "\n";
-        }
-
-        this->requestType = requestType;   
-        this -> hints.ai_family = AF_UNSPEC;
-        this -> hints.ai_socktype = SOCK_STREAM;
-        this -> hints.ai_protocol = IPPROTO_TCP;
+    HttpClient::HttpClient(HttpClient::REQUEST_TYPE requestType){
+            //Initialise WinSocksDLL
+            this -> iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+            if(this -> iResult != 0){
+                std::cout << "WinSock failed to start" << "\n";
+            }
+            this -> port = DEFAULT_PORT;
+            this -> result=NULL;
+            this -> ptr = NULL;
+            this -> hints = {};
+            this -> requestType = requestType;   
+            this -> hints.ai_family = AF_UNSPEC;
+            this -> hints.ai_socktype = SOCK_STREAM;
+            this -> hints.ai_protocol = IPPROTO_TCP;
 
     };
-    void createSocket(){
+    void HttpClient::createSocket(){
         std::cout << "Resolving ip address from hostname "<<  this -> hostname  << " on port " << this -> port << "\n";
         
         iResult = getaddrinfo(this -> hostname, this -> port, &hints, &result);
@@ -89,7 +53,7 @@ class HttpClient{
             }
         return;
     }
-    void request(std::string query)
+    void HttpClient::request(std::string query)
     {
         char *buffer = (char*)std::calloc(DEFAULT_BUFLEN,sizeof(char));
         std::string requestType;
@@ -98,7 +62,7 @@ class HttpClient{
             requestType = "GET ";  
         }
         std::string host = this -> hostname;
-        std::string httpRequest = requestType + "/" + query + " HTTP/1.1\r\n" + "Host: " + host+"\r\n\r\n"; 
+        std::string httpRequest = requestType + "/" + query + " HTTP/1.1\r\n" + "Host: " + host +"\r\n\r\n"; 
         std::cout << httpRequest << "\n";
         send(currSocket, httpRequest.c_str(), strlen(httpRequest.c_str()), 0);
         iResult = recv(currSocket,buffer,DEFAULT_BUFLEN,0);
@@ -123,22 +87,18 @@ class HttpClient{
 
         };
 
-        
-
-    };
 
 int main(){
-    enum REQUEST_TYPE requestType= REQUEST_TYPE::GET;
-    PCSTR hostname = "localhost";
+    enum HttpClient::REQUEST_TYPE requestType= HttpClient::REQUEST_TYPE::GET;
+    PCSTR hostname = "youtube.com";
     HttpClient client (requestType);
     client.hostname = hostname;
     
     std::cout << "HTTP Client Created" << "\n";  
-    while(1){
-        client.createSocket();
-        std::string a = "README.md"; 
-        client.request(a);
-    }
+
+    client.createSocket();
+    std::string a = ""; 
+    client.request(a);
   
     return 0;
 }
