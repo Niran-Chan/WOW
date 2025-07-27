@@ -9,9 +9,11 @@
 #define TRANSLATE_ID   1001
 #define CLEAR_ID   1002
 #define SETTINGS_ID 1003
+#define SETTINGS_APPLY_ID 2001
 #define OPEN_PROG_HOTKEY_ID 1
 
 HWND windowHandler; //Main Window
+HWND settingsWindowHandler;
 HWND translateButtonHandler;
 HWND translatedTextHandler;
 HWND scrollBarHandler;
@@ -19,8 +21,17 @@ HWND clearButtonHandler;
 HWND sourceTextHandler;
 HWND settingsButtonHandler;
 
+//Settings Window
+HWND APITextHandler;
+
 std::vector<HWND> windowHandlers; //Just to keep track of all windows currently present
 
+//Custom Class Names used for custom windows
+LPCWSTR mainClassName = L"mainClass";
+LPCWSTR settingsClassName = L"settingsClass";
+
+//Settings Keys
+LPCWSTR API_KEY = L"Translation_API";
 //Constants
 const int MAX_TEXT_LEN = 4096;
 const int MAX_BUFFER_CHAR_ENV = 32767;
@@ -41,6 +52,13 @@ enum OPACITY_LEVEL OPACITY = LOW;
 /*
     Function to layout similar to flex by using only the handlers that we have already defined. Layout is done relative to the first handle in the vector (parent handle) as offset
 */
+void CreateSettingsWindow(){
+    int X =0;
+    int Y = 0;
+    int nWidth = 350;
+    int nHeight = 350; 
+    settingsWindowHandler = CreateWindowExW(WS_EX_TOPMOST,settingsClassName,L"Settings Window",WS_OVERLAPPEDWINDOW,X,Y,nWidth,nHeight,NULL,NULL,NULL,NULL);
+}
 void flexLayout(std::vector<HWND> componentHandlers,int parentX,int parentY, int gap,enum FLEX_DIR dir){
     int xGap = gap,yGap =0;
     if(dir == FLEX_DIR::COL)
@@ -160,6 +178,11 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                     }
                     case 1003:
                     {
+                        //Check if settings window is ready to be opened
+                        if(!settingsWindowHandler){
+                            CreateSettingsWindow();
+                            std::cout << "Creating Settings window again" << "\n";
+                        }
                         //To open new window, call window handler to ShowWindow
                          //Show and Update paint on window
                         ShowWindow(settingsWindowHandler, SW_SHOW);
@@ -245,27 +268,55 @@ void populateEnvironmentVars(){
 LRESULT settingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,LPARAM lParam){
     switch(uMsg){
         case WM_CREATE:{
-            std::vector<HWND> mainDiv;
    
-            HWND APITextTitle = CreateWindowExW(0,L"STATIC",L"This is read-only text.",WS_CHILD | WS_VISIBLE, 0,0,50,20,hWnd,NULL,GetModuleHandle(NULL),NULL);
-            HWND APITextHandler = CreateWindowExW(0, L"EDIT", L"",WS_CHILD | WS_VISIBLE, 0, 0, 100, 20,hWnd, NULL, GetModuleHandle(NULL), NULL);
+            HWND APITextTitle = CreateWindowExW(0,L"STATIC",L"Translation API key",WS_CHILD | WS_VISIBLE, 0,0,100,20,hWnd,NULL,GetModuleHandle(NULL),NULL);
+            LPWSTR currEnvAPIKey = (LPWSTR)std::calloc(MAX_TEXT_LEN,sizeof(LPWSTR)); //Change buffer allocated length later
+            GetEnvironmentVariableW(API_KEY,currEnvAPIKey,MAX_TEXT_LEN);
+            APITextHandler = CreateWindowExW(0, L"EDIT", currEnvAPIKey,WS_CHILD | WS_VISIBLE, 0, 0, 100, 20,hWnd, NULL, GetModuleHandle(NULL), NULL);
             std::vector<HWND> div {APITextTitle,APITextHandler};
             std::cout << "Text Handler in settings created" << "\n";
-            int buttonWidth = 50;
-            int buttonHeight = 50;
-            HWND applyButton = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"Translate\n", WS_CHILD | WS_VISIBLE | WS_BORDER,20,20,buttonWidth,buttonHeight,hWnd,(HMENU)TRANSLATE_ID,NULL,NULL);
+            int buttonWidth = 100;
+            int buttonHeight = 20;
+            HWND applyButton = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"Apply\n", WS_CHILD | WS_VISIBLE | WS_BORDER,300,300,buttonWidth,buttonHeight,hWnd,(HMENU)SETTINGS_APPLY_ID,NULL,NULL);
             flexLayout(div,0,0,20,FLEX_DIR::ROW);
-            flexLayout(mainDiv,0,0,50,FLEX_DIR::COL);
             break;
         }
+        case WM_COMMAND:
+        if(HIWORD(wParam) == BN_CLICKED)
+            {
+                int id = LOWORD(wParam); 
+                switch(id){
+                    case 2001:
+                    {
+                        //std::cout << "Button Pressed" << "\n";
+                        //Store string up till now into temp buffer, then add to buffer, then set is back
+                        LPWSTR buffer = (LPWSTR)std::calloc(MAX_TEXT_LEN ,sizeof(WCHAR)); //Allocate larger buffer
+                        GetWindowTextW(APITextHandler,buffer,MAX_TEXT_LEN);
+                        //Create environment variable
+                        BOOL ret = SetEnvironmentVariableW(API_KEY,buffer);
+                        if(ret == 0){
+                            std::cout << "Setting Environment Var Failed!" << "\n";
+                        }
+                        /*
+                        for(int i =0; i < MAX_TEXT_LEN;++i){
+                            std::cout << buffer[i] << "\t";
+                        }
+                        std::cout << "\n";
+                        */
+                        break;
+                    }
+            }
+            }
+        break;
         case WM_DESTROY:{
             std::cout <<"Exiting Settings" << "\n";
-            PostQuitMessage(0);
+            settingsWindowHandler = NULL;
             return (0);
         }
    }
    return DefWindowProcW(hWnd, uMsg, wParam, lParam); 
 }
+
 int main (){
     //Read from .env file for auto-environment vars population
     populateEnvironmentVars();
@@ -273,13 +324,11 @@ int main (){
     
     //Define Windows Class to be registered 
     WNDCLASSEXW mainClass = { };
-    LPCWSTR mainClassName = L"mainClass";
-    
     mainClass.cbSize = sizeof(mainClass);
     mainClass.lpfnWndProc = WndProc;
     mainClass.hInstance = GetModuleHandle(NULL); 
     mainClass.lpszClassName = mainClassName;
-   // translateOverlayClass.hCursor = LoadCursor(NULL, IDC_ARROW);
+    // translateOverlayClass.hCursor = LoadCursor(NULL, IDC_ARROW);
     mainClass.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     
    //Register class as ATOM for use with Window Handler later
@@ -288,7 +337,7 @@ int main (){
     DWORD windowStyle =  WS_OVERLAPPEDWINDOW;
 
     WNDCLASSEXW settingsClass = { };
-    LPCWSTR settingsClassName = L"settingsClass";
+
 
     settingsClass.cbSize = sizeof(settingsClass);
     settingsClass.lpfnWndProc = settingsWndProc;
@@ -309,11 +358,11 @@ int main (){
         return(0);
     }
     windowHandlers.push_back(windowHandler);
-
-    settingsWindowHandler = CreateWindowExW(WS_EX_TOPMOST,settingsClassName,L"Settings Window",WS_OVERLAPPEDWINDOW,X,Y,nWidth,nHeight,NULL,NULL,NULL,NULL);
+    CreateSettingsWindow();
+    //settingsWindowHandler = CreateWindowExW(WS_EX_TOPMOST,settingsClassName,L"Settings Window",WS_OVERLAPPEDWINDOW,X,Y,nWidth,nHeight,NULL,NULL,NULL,NULL);
     std::cout << "Window and related classes initialised" << "\n";
     
-    
+
     //Setting initial transparency  
     COLORREF crKey = RGB(255,255,255);
     BYTE bAlpha = OPACITY;
