@@ -10,6 +10,7 @@
 #define CLEAR_ID   1002
 #define SETTINGS_ID 1003
 #define SETTINGS_APPLY_ID 2001
+#define SETTINGS_OK_ID 2002
 #define OPEN_PROG_HOTKEY_ID 1
 
 HWND windowHandler; //Main Window
@@ -31,7 +32,7 @@ LPCWSTR mainClassName = L"mainClass";
 LPCWSTR settingsClassName = L"settingsClass";
 
 //Settings Keys
-LPCWSTR API_KEY = L"Translation_API";
+LPCWSTR API_KEY = L"Translate_API";
 //Constants
 const int MAX_TEXT_LEN = 4096;
 const int MAX_BUFFER_CHAR_ENV = 32767;
@@ -274,11 +275,15 @@ LRESULT settingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,LPARAM lParam){
             GetEnvironmentVariableW(API_KEY,currEnvAPIKey,MAX_TEXT_LEN);
             APITextHandler = CreateWindowExW(0, L"EDIT", currEnvAPIKey,WS_CHILD | WS_VISIBLE, 0, 0, 100, 20,hWnd, NULL, GetModuleHandle(NULL), NULL);
             std::vector<HWND> div {APITextTitle,APITextHandler};
+            flexLayout(div,0,0,20,FLEX_DIR::ROW);
+            
             std::cout << "Text Handler in settings created" << "\n";
             int buttonWidth = 100;
             int buttonHeight = 20;
-            HWND applyButton = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"Apply\n", WS_CHILD | WS_VISIBLE | WS_BORDER,300,300,buttonWidth,buttonHeight,hWnd,(HMENU)SETTINGS_APPLY_ID,NULL,NULL);
-            flexLayout(div,0,0,20,FLEX_DIR::ROW);
+            HWND OKButton  =  CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"OK\n", WS_CHILD | WS_VISIBLE | WS_BORDER,0,0,buttonWidth,buttonHeight,hWnd,(HMENU)SETTINGS_OK_ID,NULL,NULL);
+            HWND applyButton = CreateWindowExW(BS_PUSHBUTTON | BS_NOTIFY, L"Button",L"Apply\n", WS_CHILD | WS_VISIBLE | WS_BORDER,250,250,buttonWidth,buttonHeight,hWnd,(HMENU)SETTINGS_APPLY_ID,NULL,NULL);
+            std::vector<HWND> buttonDiv {OKButton,applyButton};
+            flexLayout(buttonDiv,100,270,20,FLEX_DIR::ROW);
             break;
         }
         case WM_COMMAND:
@@ -304,6 +309,10 @@ LRESULT settingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,LPARAM lParam){
                         std::cout << "\n";
                         */
                         break;
+                    }
+                    case 2002:
+                    {
+                       DestroyWindow(hWnd);
                     }
             }
             }
