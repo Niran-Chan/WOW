@@ -1,2 +1,4 @@
 *.exe
 ./releases
+build
+.env
