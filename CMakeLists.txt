@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 4.1.0)
+message(STATUS "Using CMake version ${CMAKE_VERSION}")
+project(WOW)
+find_package(CURL REQUIRED)
+add_executable(main httpClient.cpp)
+target_link_libraries(main PRIVATE CURL::libcurl)
