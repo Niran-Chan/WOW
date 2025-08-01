@@ -4,6 +4,12 @@ You can use this application to keep a persistent application always running on 
 ## Installation
 Since this will be a Windows-only project, feel free to download the compiled releases. If not, you can still build it from source.
 
+## Build Instructions
+The following dependencies are used:
+1. vcpkg
+2. cmake
+3. libcurl
+
 ## Environment Variables
 If you do not want to constantly keep updating the API key in the settings, you can save it into your .env file instead! The program auto-reads your environment variables and populates whichever that are necessary (Setting a registry key is still a WIP).
 ```
