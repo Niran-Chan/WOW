@@ -52,6 +52,25 @@
         "vector": "cpp",
         "fstream": "cpp",
         "list": "cpp",
-        "sstream": "cpp"
+        "sstream": "cpp",
+        "algorithm": "cpp",
+        "any": "cpp",
+        "array": "cpp",
+        "chrono": "cpp",
+        "codecvt": "cpp",
+        "filesystem": "cpp",
+        "forward_list": "cpp",
+        "functional": "cpp",
+        "iomanip": "cpp",
+        "map": "cpp",
+        "numeric": "cpp",
+        "optional": "cpp",
+        "ranges": "cpp",
+        "ratio": "cpp",
+        "span": "cpp",
+        "unordered_map": "cpp",
+        "valarray": "cpp",
+        "xhash": "cpp",
+        "xtree": "cpp"
     }
 }
