@@ -4,6 +4,8 @@
 #include <WinUser.h>
 #include <vector>
 #include <fstream>
+#include <curl/curl.h>
+#include <nlohmann/json.hpp> 
 
 #define UNICODE //Force MACROs to resolve to wide string equivalent instead of legacy ANSI 
 #define TRANSLATE_ID   1001
@@ -12,6 +14,8 @@
 #define SETTINGS_APPLY_ID 2001
 #define SETTINGS_OK_ID 2002
 #define OPEN_PROG_HOTKEY_ID 1
+
+using json = nlohmann::json;
 
 HWND windowHandler; //Main Window
 HWND settingsWindowHandler;
@@ -32,14 +36,20 @@ LPCWSTR mainClassName = L"mainClass";
 LPCWSTR settingsClassName = L"settingsClass";
 
 //Settings Keys
-LPCWSTR API_KEY = L"Translate_API";
+LPSTR API_KEY = "Translate_API";
 //Constants
 const int MAX_TEXT_LEN = 4096;
 const int MAX_BUFFER_CHAR_ENV = 32767;
 
-//Variables dependent on environment variables
-LPWSTR TRANSLATE_API;
 
+//Initialise CURL handle from libcurl    
+CURLcode globalHandleRet = curl_global_init(CURL_GLOBAL_ALL); //Global initialisation for CURL
+
+CURL * curl = curl_easy_init(); //Create CURL easy handle
+enum APP_MODE{
+    ONLINE = 1,
+    OFFLINE = 0
+};
 enum OPACITY_LEVEL{
     LOW = 0,
     HIGH = 255
@@ -49,10 +59,62 @@ enum FLEX_DIR{
     COL = 1
 };
 
+//Initial global enum definition
 enum OPACITY_LEVEL OPACITY = LOW;
+APP_MODE APP_STATUS = APP_MODE::OFFLINE;
+
 /*
-    Function to layout similar to flex by using only the handlers that we have already defined. Layout is done relative to the first handle in the vector (parent handle) as offset
+    request using curl object and url passed in and return response
 */
+
+// Callback to store the API response in a string
+size_t writeCallback(void *contents, size_t size, size_t nmemb, void *userp) {
+    ((std::string*)userp)->append((const char*)contents, size * nmemb);
+    return size * nmemb;
+}
+std::string request(CURL* curl,const char* url,const char* postFields){
+    std::cout << postFields << "\n";
+    CURLcode res;
+    std::string readBuffer; //Get response from the url call
+    std::cout << "URL:" << url << "\n";
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);    
+    curl_easy_setopt(curl,CURLOPT_URL,url);
+    //curl_easy_setopt(curl, CURLOPT_HTTPHEADER, nullptr); // libcurl sets content-type automatically
+    
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postFields); //Set Post Fields
+        // Write response to a string
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    //curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+    res = curl_easy_perform(curl);
+    if(res == CURLE_OK){
+        std::cout << "API request successful!" << "\n";
+        std::cout << res << "\n";
+        std::cout << readBuffer << "\n";
+        json j = json::parse(readBuffer); //Parse the buffer data as valid JSON
+
+        // Pretty-print the whole JSON with indentation
+        //std::cout << "\nParsed JSON:\n" << j.dump(4) << "\n";
+
+        if (j.contains("data") && j["data"].contains("translations")) {
+            auto translations = j["data"]["translations"];
+            if (!translations.empty() && translations[0].contains("translatedText")) {
+                      std::string translatedText = translations[0]["translatedText"];
+                //std::cout << "\nTranslated Text: " << translatedText << "\n";
+                return translatedText;
+                
+            }
+        }
+    }
+    else{
+        std::cout << "Failed to parse API request: " << GetLastError() << "\n";
+    }
+    return "";
+    
+
+
+}
 void CreateSettingsWindow(){
     int X =0;
     int Y = 0;
@@ -60,6 +122,9 @@ void CreateSettingsWindow(){
     int nHeight = 350; 
     settingsWindowHandler = CreateWindowExW(WS_EX_TOPMOST,settingsClassName,L"Settings Window",WS_OVERLAPPEDWINDOW,X,Y,nWidth,nHeight,NULL,NULL,NULL,NULL);
 }
+/*
+    Function to layout similar to flex by using only the handlers that we have already defined. Layout is done relative to the first handle in the vector (parent handle) as offset
+*/
 void flexLayout(std::vector<HWND> componentHandlers,int parentX,int parentY, int gap,enum FLEX_DIR dir){
     int xGap = gap,yGap =0;
     if(dir == FLEX_DIR::COL)
@@ -153,7 +218,7 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
             {
                 int id = LOWORD(wParam); 
                 switch(id){
-                    case 1001:
+                    case TRANSLATE_ID:
                     {
                         //std::cout << "Button Pressed" << "\n";
                         //Store string up till now into temp buffer, then add to buffer, then set is back
@@ -166,18 +231,35 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                         std::cout << "\n";
                         */
                         
-                        std::wstring temp (buffer[MAX_TEXT_LEN-2] != 0 ? LPWSTR(L"") : buffer); //-2 because null terminated string, so last index always == 0
-                        temp += LPWSTR(L"\nButton Pressed");
-                        SetWindowTextW(translatedTextHandler,temp.c_str());
+                        //Use libcurl to retrieve results
+                        //https://cloud.google.com/translate/docs/reference/rest/v2/translate
+                        std::string url = "https://translation.googleapis.com/language/translate/v2";
+                        //Retrieve params to form params string
+                        std::string key (API_KEY);
+                        //Retrieve input in textfield 
+                        LPSTR buf = (LPSTR)calloc(MAX_BUFFER_CHAR_ENV,sizeof(LPSTR));
+                        GetWindowTextA(sourceTextHandler,buf,MAX_BUFFER_CHAR_ENV);
+                        char *q = curl_easy_escape(curl, buf, 0);
+                        //std::string q (buf);
+                        std::string target("fr");
+                        std::string source("en");
+                        std::string model("nmt");
+                        std::string format("text");
+                        std::string params = "key=" + key + "&q=" + q + "&target=" + target + "&format=" + format + "&source=" + source + "&model=" + model; 
+                        std::string response = request(curl,url.c_str(),params.c_str());
+                        SetWindowTextA(translatedTextHandler,response.c_str());
+                        //std::wstring temp (buffer[MAX_TEXT_LEN-2] != 0 ? LPWSTR(L"") : buffer); //-2 because null terminated string, so last index always == 0
+                        //temp += LPWSTR(L"\nButton Pressed");
+                        //SetWindowTextW(translatedTextHandler,temp.c_str());
                         break;
                     }
-                    case 1002:
+                    case CLEAR_ID:
                     {
                         std::cout << "Clear Button Pressed" << "\n";
                         SetWindowTextW(sourceTextHandler,NULL);
                         break;
                     }
-                    case 1003:
+                    case SETTINGS_ID:
                     {
                         //Check if settings window is ready to be opened
                         if(!settingsWindowHandler){
@@ -255,12 +337,12 @@ void populateEnvironmentVars(){
     }
 
     //Inherit values that are important for the rest of the program
-    TRANSLATE_API = (LPWSTR)std::calloc(MAX_BUFFER_CHAR_ENV,sizeof(LPWSTR));
-    BOOL ret = GetEnvironmentVariableW(L"TRANSLATE_API",TRANSLATE_API,MAX_BUFFER_CHAR_ENV);
+    API_KEY = (LPSTR)std::calloc(MAX_BUFFER_CHAR_ENV,sizeof(LPSTR));
+    BOOL ret = GetEnvironmentVariableA("TRANSLATE_API",API_KEY,MAX_BUFFER_CHAR_ENV);
     if(ret == 0){
         std::cout << "Failed getting value from environment variable. Keeping default." << GetLastError() << "\n";
-        std::wstring a = L"DEFAULT_EMPTY";
-        wcscpy(TRANSLATE_API,a.c_str());
+        std::string a = "DEFAULT_EMPTY";
+        std::strcpy(API_KEY,a.c_str());
     }
     // Close the file
     myEnvFile.close(); 
@@ -271,9 +353,9 @@ LRESULT settingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,LPARAM lParam){
         case WM_CREATE:{
    
             HWND APITextTitle = CreateWindowExW(0,L"STATIC",L"Translation API key",WS_CHILD | WS_VISIBLE, 0,0,100,20,hWnd,NULL,GetModuleHandle(NULL),NULL);
-            LPWSTR currEnvAPIKey = (LPWSTR)std::calloc(MAX_TEXT_LEN,sizeof(LPWSTR)); //Change buffer allocated length later
-            GetEnvironmentVariableW(API_KEY,currEnvAPIKey,MAX_TEXT_LEN);
-            APITextHandler = CreateWindowExW(0, L"EDIT", currEnvAPIKey,WS_CHILD | WS_VISIBLE, 0, 0, 100, 20,hWnd, NULL, GetModuleHandle(NULL), NULL);
+            LPSTR currEnvAPIKey = (LPSTR)std::calloc(MAX_TEXT_LEN,sizeof(LPSTR)); //Change buffer allocated length later
+            GetEnvironmentVariableA(API_KEY,currEnvAPIKey,MAX_TEXT_LEN);
+            APITextHandler = CreateWindowExA(0, "EDIT", currEnvAPIKey,WS_CHILD | WS_VISIBLE, 0, 0, 100, 20,hWnd, NULL, GetModuleHandle(NULL), NULL);
             std::vector<HWND> div {APITextTitle,APITextHandler};
             flexLayout(div,0,0,20,FLEX_DIR::ROW);
             
@@ -291,14 +373,14 @@ LRESULT settingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,LPARAM lParam){
             {
                 int id = LOWORD(wParam); 
                 switch(id){
-                    case 2001:
+                    case SETTINGS_APPLY_ID:
                     {
                         //std::cout << "Button Pressed" << "\n";
                         //Store string up till now into temp buffer, then add to buffer, then set is back
-                        LPWSTR buffer = (LPWSTR)std::calloc(MAX_TEXT_LEN ,sizeof(WCHAR)); //Allocate larger buffer
-                        GetWindowTextW(APITextHandler,buffer,MAX_TEXT_LEN);
+                        LPSTR buffer = (LPSTR)std::calloc(MAX_TEXT_LEN ,sizeof(LPSTR)); //Allocate larger buffer
+                        GetWindowTextA(APITextHandler,buffer,MAX_TEXT_LEN);
                         //Create environment variable
-                        BOOL ret = SetEnvironmentVariableW(API_KEY,buffer);
+                        BOOL ret = SetEnvironmentVariableA(API_KEY,buffer);
                         if(ret == 0){
                             std::cout << "Setting Environment Var Failed!" << "\n";
                         }
@@ -310,7 +392,7 @@ LRESULT settingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,LPARAM lParam){
                         */
                         break;
                     }
-                    case 2002:
+                    case SETTINGS_OK_ID:
                     {
                        DestroyWindow(hWnd);
                     }
@@ -329,8 +411,18 @@ LRESULT settingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,LPARAM lParam){
 int main (){
     //Read from .env file for auto-environment vars population
     populateEnvironmentVars();
+    if (globalHandleRet != CURLE_OK) {
+        std::cerr << "curl_global_init() failed\n";
+    }
     DWORD extendedWindowStyle = WS_EX_TOPMOST |  WS_EX_LAYERED  ;
-    
+
+    //Test API connection to set application online/offline status
+    if(!curl) {
+  
+        std::cout << "Curl Handle Initialisation failed! Offline mode engaged. No online translation will be conducted" <<"\n";
+        APP_STATUS = APP_MODE::OFFLINE;
+    }
+
     //Define Windows Class to be registered 
     WNDCLASSEXW mainClass = { };
     mainClass.cbSize = sizeof(mainClass);
@@ -405,7 +497,9 @@ int main (){
     }
 
     std::cout <<"Main Function Completed :)" << std::endl;
-    free(TRANSLATE_API);
+    curl_easy_cleanup(curl);
+    curl_global_cleanup();
+    std::cout << "CURL cleanup executed successfully" << "\n";
 
     return 0;
 
