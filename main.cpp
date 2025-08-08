@@ -6,6 +6,7 @@
 #include <fstream>
 #include <curl/curl.h>
 #include <nlohmann/json.hpp> 
+#include <unordered_map>
 
 #define UNICODE //Force MACROs to resolve to wide string equivalent instead of legacy ANSI 
 #define TRANSLATE_ID   1001
@@ -14,6 +15,7 @@
 #define SETTINGS_APPLY_ID 2001
 #define SETTINGS_OK_ID 2002
 #define OPEN_PROG_HOTKEY_ID 1
+#define SOURCELANG_ID 3001
 
 using json = nlohmann::json;
 
@@ -25,6 +27,7 @@ HWND scrollBarHandler;
 HWND clearButtonHandler;
 HWND sourceTextHandler;
 HWND settingsButtonHandler;
+HWND sourceLangListHandler;
 
 //Settings Window
 HWND APITextHandler;
@@ -41,6 +44,8 @@ LPSTR API_KEY = "Translate_API";
 const int MAX_TEXT_LEN = 4096;
 const int MAX_BUFFER_CHAR_ENV = 32767;
 
+//Global Application Maps
+std::unordered_map<std::string,std::string> availableLanguages;
 
 //Initialise CURL handle from libcurl    
 CURLcode globalHandleRet = curl_global_init(CURL_GLOBAL_ALL); //Global initialisation for CURL
@@ -58,6 +63,10 @@ enum FLEX_DIR{
     ROW = 0,
     COL = 1
 };
+enum API_REQUEST_TYPE{
+    TRANSLATE_REQ = 0,
+    GET_LANG = 1
+};
 
 //Initial global enum definition
 enum OPACITY_LEVEL OPACITY = LOW;
@@ -72,17 +81,27 @@ size_t writeCallback(void *contents, size_t size, size_t nmemb, void *userp) {
     ((std::string*)userp)->append((const char*)contents, size * nmemb);
     return size * nmemb;
 }
-std::string request(CURL* curl,const char* url,const char* postFields){
-    std::cout << postFields << "\n";
+std::string request(CURL* curl,std::string url,std::string params,API_REQUEST_TYPE reqType){
     CURLcode res;
     std::string readBuffer; //Get response from the url call
-    std::cout << "URL:" << url << "\n";
-    curl_easy_setopt(curl, CURLOPT_POST, 1L);    
-    curl_easy_setopt(curl,CURLOPT_URL,url);
+    curl_easy_setopt(curl,CURLOPT_URL,url.c_str());
+    
+    if(reqType == API_REQUEST_TYPE::TRANSLATE_REQ){
+        std::cout << "URL:" << url << "\n";
+        curl_easy_setopt(curl, CURLOPT_POST, 1L);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, params.c_str()); //Set Post Fields
+    }   
+    else if(reqType == API_REQUEST_TYPE::GET_LANG){
+        curl_easy_setopt(curl, CURLOPT_HTTPGET,1L);
+        url += std::string("?") + params;
+        curl_easy_setopt(curl,CURLOPT_URL,url.c_str());
+        std::cout << "URL:" << url << "\n";
+    } 
+
     //curl_easy_setopt(curl, CURLOPT_HTTPHEADER, nullptr); // libcurl sets content-type automatically
     
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postFields); //Set Post Fields
-        // Write response to a string
+
+    // Write response to a string
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
@@ -91,30 +110,60 @@ std::string request(CURL* curl,const char* url,const char* postFields){
     if(res == CURLE_OK){
         std::cout << "API request successful!" << "\n";
         std::cout << res << "\n";
-        std::cout << readBuffer << "\n";
+        //std::cout << readBuffer << "\n";
         json j = json::parse(readBuffer); //Parse the buffer data as valid JSON
-
+       
         // Pretty-print the whole JSON with indentation
         //std::cout << "\nParsed JSON:\n" << j.dump(4) << "\n";
-
-        if (j.contains("data") && j["data"].contains("translations")) {
-            auto translations = j["data"]["translations"];
-            if (!translations.empty() && translations[0].contains("translatedText")) {
-                      std::string translatedText = translations[0]["translatedText"];
-                //std::cout << "\nTranslated Text: " << translatedText << "\n";
-                return translatedText;
-                
+        if(reqType == API_REQUEST_TYPE::TRANSLATE_REQ){
+            if (j.contains("data") && j["data"].contains("translations")) {
+                auto translations = j["data"]["translations"];
+                if (!translations.empty() && translations[0].contains("translatedText")) {
+                        std::string translatedText = translations[0]["translatedText"];
+                    //std::cout << "\nTranslated Text: " << translatedText << "\n";
+                    curl_easy_cleanup(curl);
+                    return translatedText;
+                    
+                }
             }
+            else{
+                MessageBoxA(windowHandler,"Translate API failed","Failed to retrieve appropriate object from API. Check if object is of correct type!",MB_OK);
+                curl_easy_cleanup(curl);
+                return "";
+            }
+        }
+   
+        else if (reqType == API_REQUEST_TYPE::GET_LANG){
+            
+            if(!j.empty() && j.contains("data") && j["data"].contains("languages"))
+            {
+                
+                for(int i =0; i < j["data"]["languages"].size();++i){
+                    std::string key = j["data"]["languages"][i]["name"];
+                    std::string val = j["data"]["languages"][i]["language"];
+                    availableLanguages[key]= val;
+                }
+                        //Explore unordered_map to print
+                        /*
+                for(const std::pair<const std::string, std::string> &n : availableLanguages){
+                    std::cout << "Key: " <<n.first << "\tVal: " << n.second << "\n";
+            
+                    }
+                    */
+            }
+            
+            curl_easy_cleanup(curl);
+            return "";
         }
     }
     else{
         std::cout << "Failed to parse API request: " << GetLastError() << "\n";
     }
+    curl_easy_cleanup(curl);
     return "";
     
-
-
 }
+
 void CreateSettingsWindow(){
     int X =0;
     int Y = 0;
@@ -209,6 +258,19 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
         windowHandlers.push_back(settingsButtonHandler);
         buttonHandlers.push_back(settingsButtonHandler);
 
+        sourceLangListHandler = CreateWindowExW(0,L"COMBOBOX",NULL,WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,100, 50, 100, 300,hWnd,(HMENU)SOURCELANG_ID,NULL,NULL);
+        //Retrieve items data for adding to sourceLangHandler
+        std::string getLangUrl = "https://translation.googleapis.com/language/translate/v2/languages";
+        std::string getLangParams = "key=" + std::string(API_KEY) +  "&target=en&model=nmt";
+        request(curl,getLangUrl.c_str(),getLangParams.c_str(),API_REQUEST_TYPE::GET_LANG); //Populates global unordered_map instead
+        
+        //This is still blocking. Need to optimise to asynchronous eventually
+        for(const std::pair<const std::string,std::string> &a : availableLanguages){
+            SendMessageA(sourceLangListHandler,CB_ADDSTRING,0,(LPARAM)a.first.c_str());
+        }
+        
+
+        //Iterate through list of items and add into list
         flexLayout(textFieldHandlers,100,100,100,FLEX_DIR::COL);
         flexLayout(buttonHandlers,0,0,30,FLEX_DIR::ROW);
         break;
@@ -246,7 +308,7 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                         std::string model("nmt");
                         std::string format("text");
                         std::string params = "key=" + key + "&q=" + q + "&target=" + target + "&format=" + format + "&source=" + source + "&model=" + model; 
-                        std::string response = request(curl,url.c_str(),params.c_str());
+                        std::string response = request(curl,url.c_str(),params.c_str(),API_REQUEST_TYPE::TRANSLATE_REQ);
                         SetWindowTextA(translatedTextHandler,response.c_str());
                         //std::wstring temp (buffer[MAX_TEXT_LEN-2] != 0 ? LPWSTR(L"") : buffer); //-2 because null terminated string, so last index always == 0
                         //temp += LPWSTR(L"\nButton Pressed");
