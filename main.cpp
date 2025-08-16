@@ -64,14 +64,16 @@ enum FLEX_DIR{
     COL = 1
 };
 enum API_REQUEST_TYPE{
-    TRANSLATE_REQ = 0,
-    GET_LANG = 1
+    TRANSLATE_REQ = 1,
+    GET_LANG = 2
 };
 
 //Initial global enum definition
 enum OPACITY_LEVEL OPACITY = LOW;
 APP_MODE APP_STATUS = APP_MODE::OFFLINE;
 
+//Global Variables
+std::string sourceLang;
 /*
     request using curl object and url passed in and return response
 */
@@ -85,22 +87,22 @@ std::string request(CURL* curl,std::string url,std::string params,API_REQUEST_TY
     CURLcode res;
     std::string readBuffer; //Get response from the url call
     curl_easy_setopt(curl,CURLOPT_URL,url.c_str());
-    
     if(reqType == API_REQUEST_TYPE::TRANSLATE_REQ){
-        std::cout << "URL:" << url << "\n";
+        //std::cout << "URL:" << url << "\n";
         curl_easy_setopt(curl, CURLOPT_POST, 1L);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, params.c_str()); //Set Post Fields
     }   
-    else if(reqType == API_REQUEST_TYPE::GET_LANG){
-        curl_easy_setopt(curl, CURLOPT_HTTPGET,1L);
+    //else if(reqType == API_REQUEST_TYPE::GET_LANG){
+    else{
+    curl_easy_setopt(curl, CURLOPT_HTTPGET,1L);
         url += std::string("?") + params;
         curl_easy_setopt(curl,CURLOPT_URL,url.c_str());
-        std::cout << "URL:" << url << "\n";
+        //std::cout << "URL:" << url << "\n";
     } 
 
     //curl_easy_setopt(curl, CURLOPT_HTTPHEADER, nullptr); // libcurl sets content-type automatically
     
-
+    //std::cout << "Sending: " << url << "\n";
     // Write response to a string
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
@@ -119,16 +121,15 @@ std::string request(CURL* curl,std::string url,std::string params,API_REQUEST_TY
             if (j.contains("data") && j["data"].contains("translations")) {
                 auto translations = j["data"]["translations"];
                 if (!translations.empty() && translations[0].contains("translatedText")) {
-                        std::string translatedText = translations[0]["translatedText"];
+                    std::string translatedText = translations[0]["translatedText"];
                     //std::cout << "\nTranslated Text: " << translatedText << "\n";
-                    curl_easy_cleanup(curl);
+         
                     return translatedText;
                     
                 }
             }
             else{
-                MessageBoxA(windowHandler,"Translate API failed","Failed to retrieve appropriate object from API. Check if object is of correct type!",MB_OK);
-                curl_easy_cleanup(curl);
+                MessageBoxA(windowHandler,"Failed to retrieve appropriate object from API. Check if object is of correct type!","Translate API failed",MB_OK);
                 return "";
             }
         }
@@ -152,14 +153,14 @@ std::string request(CURL* curl,std::string url,std::string params,API_REQUEST_TY
                     */
             }
             
-            curl_easy_cleanup(curl);
+  
             return "";
         }
     }
     else{
         std::cout << "Failed to parse API request: " << GetLastError() << "\n";
     }
-    curl_easy_cleanup(curl);
+
     return "";
     
 }
@@ -258,18 +259,20 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
         windowHandlers.push_back(settingsButtonHandler);
         buttonHandlers.push_back(settingsButtonHandler);
 
-        sourceLangListHandler = CreateWindowExW(0,L"COMBOBOX",NULL,WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,100, 50, 100, 300,hWnd,(HMENU)SOURCELANG_ID,NULL,NULL);
+        sourceLangListHandler = CreateWindowExA(0,"COMBOBOX",NULL,WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,100, 50, 100, 300,hWnd,(HMENU)SOURCELANG_ID,NULL,NULL);
         //Retrieve items data for adding to sourceLangHandler
         std::string getLangUrl = "https://translation.googleapis.com/language/translate/v2/languages";
-        std::string getLangParams = "key=" + std::string(API_KEY) +  "&target=en&model=nmt";
-        request(curl,getLangUrl.c_str(),getLangParams.c_str(),API_REQUEST_TYPE::GET_LANG); //Populates global unordered_map instead
-        
+        if(API_KEY != ""){
+            std::string getLangParams = "key=" + std::string(API_KEY) +  "&target=en&model=nmt";
+            request(curl,getLangUrl.c_str(),getLangParams.c_str(),API_REQUEST_TYPE::GET_LANG); //Populates global unordered_map instead
+        }
+        else{
+            MessageBoxA(hWnd,LPCSTR("NO API KEY"),LPCSTR("No API key registered! Set in settings"),MB_OK);
+        }
         //This is still blocking. Need to optimise to asynchronous eventually
         for(const std::pair<const std::string,std::string> &a : availableLanguages){
             SendMessageA(sourceLangListHandler,CB_ADDSTRING,0,(LPARAM)a.first.c_str());
         }
-        
-
         //Iterate through list of items and add into list
         flexLayout(textFieldHandlers,100,100,100,FLEX_DIR::COL);
         flexLayout(buttonHandlers,0,0,30,FLEX_DIR::ROW);
@@ -284,10 +287,14 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                     {
                         //std::cout << "Button Pressed" << "\n";
                         //Store string up till now into temp buffer, then add to buffer, then set is back
-                        LPWSTR buffer = (LPWSTR)std::calloc(MAX_TEXT_LEN ,sizeof(WCHAR)); //Allocate larger buffer
-                        GetWindowTextW(translatedTextHandler,buffer,MAX_TEXT_LEN);
+                        LPSTR buffer = (LPSTR)std::calloc(MAX_TEXT_LEN ,sizeof(LPSTR)); //Allocate larger buffer
+                        GetWindowTextA(translatedTextHandler,buffer,MAX_TEXT_LEN);
                         /*
+                        //BUFFER CHECK
+                        std::cout << "Stored buffer: " << "\n";
                         for(int i =0; i < MAX_TEXT_LEN;++i){
+                            if(buffer[i] == NULL)
+                                break;
                             std::cout << buffer[i] << "\t";
                         }
                         std::cout << "\n";
@@ -304,10 +311,11 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                         char *q = curl_easy_escape(curl, buf, 0);
                         //std::string q (buf);
                         std::string target("fr");
-                        std::string source("en");
+                        std::string source(sourceLang);
                         std::string model("nmt");
                         std::string format("text");
                         std::string params = "key=" + key + "&q=" + q + "&target=" + target + "&format=" + format + "&source=" + source + "&model=" + model; 
+                        std::cout << "Calling request function" << "\n";
                         std::string response = request(curl,url.c_str(),params.c_str(),API_REQUEST_TYPE::TRANSLATE_REQ);
                         SetWindowTextA(translatedTextHandler,response.c_str());
                         //std::wstring temp (buffer[MAX_TEXT_LEN-2] != 0 ? LPWSTR(L"") : buffer); //-2 because null terminated string, so last index always == 0
@@ -339,8 +347,33 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                     }
             }
             }
-        break;
-    
+     
+        
+        else if (HIWORD(wParam) == CBN_SELCHANGE)
+        {
+            //We are using 2 combo boxes. Need identification.
+            int id = LOWORD(wParam);
+            std::cout << id << "\n";
+            switch(id){
+                case SOURCELANG_ID:
+                {
+                    std::cout << "New Language Selected" << "\n";
+                    // Get selected item index
+                        int sel = SendMessage(sourceLangListHandler, CB_GETCURSEL, 0, 0); //Get index of current item
+                        if (sel != CB_ERR) {
+                            char* buf= (char*) std::calloc(MAX_BUFFER_CHAR_ENV,sizeof(char));
+                            SendMessageA(sourceLangListHandler, CB_GETLBTEXT, sel, (LPARAM) buf); //Get text of current item
+                            std::cout << "Language Code: " << availableLanguages[buf] << "\n";
+                            if(availableLanguages.find(buf) != availableLanguages.end()){sourceLang = availableLanguages[buf];}
+                            else{MessageBoxA(hWnd,"Language Unavailable","No Language Code was found for selected language. Not gonna even try",MB_OK);}
+                            
+                        }
+                break;
+                }
+            }
+            break;
+        }
+   
 
     case WM_HOTKEY:
     {
