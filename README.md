@@ -9,6 +9,7 @@ The following dependencies are used:
 1. vcpkg
 2. cmake
 3. libcurl
+4. nlohmann_json
 
 ## Environment Variables
 If you do not want to constantly keep updating the API key in the settings, you can save it into your .env file instead! The program auto-reads your environment variables and populates whichever that are necessary (Setting a registry key is still a WIP).
