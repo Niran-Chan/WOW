@@ -16,6 +16,7 @@
 #define SETTINGS_OK_ID 2002
 #define OPEN_PROG_HOTKEY_ID 1
 #define SOURCELANG_ID 3001
+#define TARGETLANG_ID 3002
 
 using json = nlohmann::json;
 
@@ -28,6 +29,7 @@ HWND clearButtonHandler;
 HWND sourceTextHandler;
 HWND settingsButtonHandler;
 HWND sourceLangListHandler;
+HWND targetLangListHandler;
 
 //Settings Window
 HWND APITextHandler;
@@ -73,7 +75,8 @@ enum OPACITY_LEVEL OPACITY = LOW;
 APP_MODE APP_STATUS = APP_MODE::OFFLINE;
 
 //Global Variables
-std::string sourceLang;
+std::string sourceLang = "en";
+std::string targetLang = "fr";
 /*
     request using curl object and url passed in and return response
 */
@@ -267,14 +270,37 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
             request(curl,getLangUrl.c_str(),getLangParams.c_str(),API_REQUEST_TYPE::GET_LANG); //Populates global unordered_map instead
         }
         else{
-            MessageBoxA(hWnd,LPCSTR("NO API KEY"),LPCSTR("No API key registered! Set in settings"),MB_OK);
+            MessageBoxA(hWnd,LPCSTR("No API key registered! Set in settings"),LPCSTR("NO API KEY"),MB_OK);
         }
         //This is still blocking. Need to optimise to asynchronous eventually
+        int sourceIdx =0 ;
         for(const std::pair<const std::string,std::string> &a : availableLanguages){
             SendMessageA(sourceLangListHandler,CB_ADDSTRING,0,(LPARAM)a.first.c_str());
+            if(a.second == sourceLang)
+            {
+                //Setting the first default value
+                SendMessageA(sourceLangListHandler,CB_SETCURSEL,(WPARAM)sourceIdx,NULL);
+            }
+            sourceIdx++;
         }
+   
+ 
+ 
+       targetLangListHandler = CreateWindowExA(0,"COMBOBOX",NULL,WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,100, 400, 100, 300,hWnd,(HMENU)TARGETLANG_ID,NULL,NULL);
+        //This is still blocking. Need to optimise to asynchronous eventually
+        int targetIdx =0;
+        for(const std::pair<const std::string,std::string> &a : availableLanguages){
+            SendMessageA(targetLangListHandler,CB_ADDSTRING,0,(LPARAM)a.first.c_str());
+            if(a.second == targetLang)
+            {
+                //Setting the first default value
+                SendMessageA(targetLangListHandler,CB_SETCURSEL,(WPARAM)targetIdx,NULL);
+            }
+            targetIdx++;
+        }
+
         //Iterate through list of items and add into list
-        flexLayout(textFieldHandlers,100,100,100,FLEX_DIR::COL);
+        flexLayout(textFieldHandlers,100,100,50,FLEX_DIR::COL);
         flexLayout(buttonHandlers,0,0,30,FLEX_DIR::ROW);
         break;
     }
@@ -310,7 +336,7 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                         GetWindowTextA(sourceTextHandler,buf,MAX_BUFFER_CHAR_ENV);
                         char *q = curl_easy_escape(curl, buf, 0);
                         //std::string q (buf);
-                        std::string target("fr");
+                        std::string target(targetLang);
                         std::string source(sourceLang);
                         std::string model("nmt");
                         std::string format("text");
@@ -369,6 +395,20 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                             
                         }
                 break;
+                }
+
+                case TARGETLANG_ID:
+                {
+                        int sel = SendMessage(targetLangListHandler, CB_GETCURSEL, 0, 0); //Get index of current item
+                        if (sel != CB_ERR) {
+                            char* buf= (char*) std::calloc(MAX_BUFFER_CHAR_ENV,sizeof(char));
+                            SendMessageA(targetLangListHandler, CB_GETLBTEXT, sel, (LPARAM) buf); //Get text of current item
+                            std::cout << "Language Code: " << availableLanguages[buf] << "\n";
+                            if(availableLanguages.find(buf) != availableLanguages.end()){targetLang = availableLanguages[buf];}
+                            else{MessageBoxA(hWnd,"Language Unavailable","No Language Code was found for selected language. Not gonna even try",MB_OK);}
+                            
+                        }
+                break;   
                 }
             }
             break;
