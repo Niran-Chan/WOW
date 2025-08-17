@@ -313,8 +313,8 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                     {
                         //std::cout << "Button Pressed" << "\n";
                         //Store string up till now into temp buffer, then add to buffer, then set is back
-                        LPSTR buffer = (LPSTR)std::calloc(MAX_TEXT_LEN ,sizeof(LPSTR)); //Allocate larger buffer
-                        GetWindowTextA(translatedTextHandler,buffer,MAX_TEXT_LEN);
+                        LPWSTR buffer = (LPWSTR)std::calloc(MAX_TEXT_LEN ,sizeof(LPWSTR)); //Allocate larger buffer
+                        GetWindowTextW(translatedTextHandler,buffer,MAX_TEXT_LEN);
                         /*
                         //BUFFER CHECK
                         std::cout << "Stored buffer: " << "\n";
@@ -331,19 +331,29 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                         std::string url = "https://translation.googleapis.com/language/translate/v2";
                         //Retrieve params to form params string
                         std::string key (API_KEY);
-                        //Retrieve input in textfield 
-                        LPSTR buf = (LPSTR)calloc(MAX_BUFFER_CHAR_ENV,sizeof(LPSTR));
-                        GetWindowTextA(sourceTextHandler,buf,MAX_BUFFER_CHAR_ENV);
-                        char *q = curl_easy_escape(curl, buf, 0);
+                        /*
+                        Retrieve input in textfield 
+                        We need UTF16 -> UTF8 for libcurl to process
+                        Libcurl result -> UTF8 for display
+                        */
+                        LPWSTR buf = (LPWSTR)calloc(MAX_BUFFER_CHAR_ENV,sizeof(WCHAR));
+                        GetWindowTextW(sourceTextHandler,buf,MAX_BUFFER_CHAR_ENV);
+                        ULONG utf8BufSize = WideCharToMultiByte(CP_UTF8,0,buf,-1,NULL,0,NULL,NULL);
+                        LPSTR utf8Buf = (LPSTR)calloc(utf8BufSize,sizeof(CHAR));
+                        WideCharToMultiByte(CP_UTF8,0,buf,-1,utf8Buf,utf8BufSize,NULL,NULL);
+                        char *q = curl_easy_escape(curl, utf8Buf, 0);
                         //std::string q (buf);
                         std::string target(targetLang);
                         std::string source(sourceLang);
                         std::string model("nmt");
                         std::string format("text");
                         std::string params = "key=" + key + "&q=" + q + "&target=" + target + "&format=" + format + "&source=" + source + "&model=" + model; 
-                        std::cout << "Calling request function" << "\n";
                         std::string response = request(curl,url.c_str(),params.c_str(),API_REQUEST_TYPE::TRANSLATE_REQ);
-                        SetWindowTextA(translatedTextHandler,response.c_str());
+                       
+                        int reqSize = MultiByteToWideChar(CP_UTF8,0,response.c_str(),-1,NULL,0);
+                        LPWSTR convertedResp = (LPWSTR)std::calloc(reqSize,sizeof(WCHAR));
+                        MultiByteToWideChar(CP_UTF8, 0,response.c_str(), -1,convertedResp,reqSize);
+                        SetWindowTextW(translatedTextHandler,convertedResp);
                         //std::wstring temp (buffer[MAX_TEXT_LEN-2] != 0 ? LPWSTR(L"") : buffer); //-2 because null terminated string, so last index always == 0
                         //temp += LPWSTR(L"\nButton Pressed");
                         //SetWindowTextW(translatedTextHandler,temp.c_str());
