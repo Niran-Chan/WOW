@@ -2,3 +2,5 @@
 ./releases
 build
 .env
+*.zip
+
