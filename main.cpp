@@ -40,12 +40,12 @@ std::vector<HWND> windowHandlers; //Just to keep track of all windows currently 
 LPCWSTR mainClassName = L"mainClass";
 LPCWSTR settingsClassName = L"settingsClass";
 
-//Settings Keys
-LPSTR API_KEY = "Translate_API";
 //Constants
 const int MAX_TEXT_LEN = 4096;
 const int MAX_BUFFER_CHAR_ENV = 32767;
 
+//Settings Keys
+LPWSTR API_KEY = (LPWSTR)std::calloc(MAX_BUFFER_CHAR_ENV,sizeof(WCHAR));
 //Global Application Maps
 std::unordered_map<std::string,std::string> availableLanguages;
 
@@ -77,6 +77,10 @@ APP_MODE APP_STATUS = APP_MODE::OFFLINE;
 //Global Variables
 std::string sourceLang = "en";
 std::string targetLang = "fr";
+
+//Helper functions
+
+
 /*
     request using curl object and url passed in and return response
 */
@@ -132,7 +136,7 @@ std::string request(CURL* curl,std::string url,std::string params,API_REQUEST_TY
                 }
             }
             else{
-                MessageBoxA(windowHandler,"Failed to retrieve appropriate object from API. Check if object is of correct type!","Translate API failed",MB_OK);
+                MessageBoxW(windowHandler,L"Translate API returned either a corrupted object or API key is non-functional. Please check your API key!",L"Translate API failed",MB_OK);
                 return "";
             }
         }
@@ -265,8 +269,14 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
         sourceLangListHandler = CreateWindowExA(0,"COMBOBOX",NULL,WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,100, 50, 100, 300,hWnd,(HMENU)SOURCELANG_ID,NULL,NULL);
         //Retrieve items data for adding to sourceLangHandler
         std::string getLangUrl = "https://translation.googleapis.com/language/translate/v2/languages";
-        if(API_KEY != ""){
-            std::string getLangParams = "key=" + std::string(API_KEY) +  "&target=en&model=nmt";
+        //UTF-8 version of API_KEY
+        if(API_KEY != L""){
+            //Create utf-8 API key
+            ULONG reqSize = WideCharToMultiByte(CP_UTF8,0,API_KEY,-1,NULL,0,NULL,NULL);
+            LPSTR utf8API_KEY = (LPSTR)std::calloc(reqSize,sizeof(CHAR));
+            WideCharToMultiByte(CP_UTF8,0,API_KEY,-1,utf8API_KEY,reqSize,NULL,NULL);
+
+            std::string getLangParams = "key=" + std::string(utf8API_KEY) +  "&target=en&model=nmt";
             request(curl,getLangUrl.c_str(),getLangParams.c_str(),API_REQUEST_TYPE::GET_LANG); //Populates global unordered_map instead
         }
         else{
@@ -329,8 +339,13 @@ LRESULT WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam){
                         //Use libcurl to retrieve results
                         //https://cloud.google.com/translate/docs/reference/rest/v2/translate
                         std::string url = "https://translation.googleapis.com/language/translate/v2";
+                        
+                        ULONG utf8ReqSize = WideCharToMultiByte(CP_UTF8,0,API_KEY,-1,NULL,0,NULL,NULL);
+                        LPSTR utf8API_KEY = (LPSTR)std::calloc(utf8ReqSize,sizeof(CHAR));
+                        WideCharToMultiByte(CP_UTF8,0,API_KEY,-1,utf8API_KEY,utf8ReqSize,NULL,NULL);
+
                         //Retrieve params to form params string
-                        std::string key (API_KEY);
+                        std::string key (utf8API_KEY);
                         /*
                         Retrieve input in textfield 
                         We need UTF16 -> UTF8 for libcurl to process
@@ -482,12 +497,14 @@ void populateEnvironmentVars(){
     }
 
     //Inherit values that are important for the rest of the program
-    API_KEY = (LPSTR)std::calloc(MAX_BUFFER_CHAR_ENV,sizeof(LPSTR));
-    BOOL ret = GetEnvironmentVariableA("TRANSLATE_API",API_KEY,MAX_BUFFER_CHAR_ENV);
+    API_KEY = (LPWSTR)std::calloc(MAX_BUFFER_CHAR_ENV,sizeof(WCHAR));
+    BOOL ret = GetEnvironmentVariableW(L"TRANSLATE_API",API_KEY,MAX_BUFFER_CHAR_ENV);
+
+ 
+
     if(ret == 0){
         std::cout << "Failed getting value from environment variable. Keeping default." << GetLastError() << "\n";
-        std::string a = "DEFAULT_EMPTY";
-        std::strcpy(API_KEY,a.c_str());
+        API_KEY = L"DEFAULT_EMPTY";
     }
     // Close the file
     myEnvFile.close(); 
@@ -498,9 +515,9 @@ LRESULT settingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,LPARAM lParam){
         case WM_CREATE:{
    
             HWND APITextTitle = CreateWindowExW(0,L"STATIC",L"Translation API key",WS_CHILD | WS_VISIBLE, 0,0,100,20,hWnd,NULL,GetModuleHandle(NULL),NULL);
-            LPSTR currEnvAPIKey = (LPSTR)std::calloc(MAX_TEXT_LEN,sizeof(LPSTR)); //Change buffer allocated length later
-            GetEnvironmentVariableA(API_KEY,currEnvAPIKey,MAX_TEXT_LEN);
-            APITextHandler = CreateWindowExA(0, "EDIT", currEnvAPIKey,WS_CHILD | WS_VISIBLE, 0, 0, 100, 20,hWnd, NULL, GetModuleHandle(NULL), NULL);
+            //LPWSTR currEnvAPIKey = (LPWSTR)std::calloc(MAX_TEXT_LEN,sizeof(WCHAR)); //Change buffer allocated length later
+            //GetEnvironmentVariableW(L"TRANSLATE_API",currEnvAPIKey,MAX_TEXT_LEN);
+            APITextHandler = CreateWindowExW(0, L"EDIT", API_KEY,WS_CHILD | WS_VISIBLE, 0, 0, 200, 20,hWnd, NULL, GetModuleHandle(NULL), NULL);
             std::vector<HWND> div {APITextTitle,APITextHandler};
             flexLayout(div,0,0,20,FLEX_DIR::ROW);
             
@@ -520,15 +537,15 @@ LRESULT settingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,LPARAM lParam){
                 switch(id){
                     case SETTINGS_APPLY_ID:
                     {
-                        //std::cout << "Button Pressed" << "\n";
+                        std::cout << "Settings Apply Pressed" << "\n";
                         //Store string up till now into temp buffer, then add to buffer, then set is back
-                        LPSTR buffer = (LPSTR)std::calloc(MAX_TEXT_LEN ,sizeof(LPSTR)); //Allocate larger buffer
-                        GetWindowTextA(APITextHandler,buffer,MAX_TEXT_LEN);
-                        //Create environment variable
-                        BOOL ret = SetEnvironmentVariableA(API_KEY,buffer);
+                        GetWindowTextW(APITextHandler,API_KEY,MAX_TEXT_LEN);
+                        /*
+                        BOOL ret = SetEnvironmentVariableW(L"TRANSLATE_API",buffer);
                         if(ret == 0){
                             std::cout << "Setting Environment Var Failed!" << "\n";
                         }
+                            */
                         /*
                         for(int i =0; i < MAX_TEXT_LEN;++i){
                             std::cout << buffer[i] << "\t";
